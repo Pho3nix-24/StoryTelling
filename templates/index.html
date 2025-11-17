@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Storytelling de Patrones con Secuencia Nativa</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="/static/js/scripts.js"></script>
+</head>
+<body class="theme-black-orange">
+    <div class="container">
+        <h1>Storytelling de patrones con <strong>secuencia nativa (6 pasos)</strong></h1>
+        <p>Sube tu CSV, inspecciona columnas, detecta outliers y genera <strong>infografías</strong> con explicaciones tipo “niño de 5 años”.<br>
+        Secuencia nativa: <strong>Paso 1 Barras → 2 Pastel → 3 Líneas → 4 Heatmap → 5 Violín → 6 Montaña</strong>.</p>
+
+        <form id="uploadForm">
+            <label for="file">Sube tu CSV</label>
+            <input type="file" id="file" accept=".csv" required>
+
+            <div class="row">
+                <div class="col">
+                    <label>Método por grupo</label>
+                    <select id="method">
+                        <option value="iqr" selected>IQR</option>
+                        <option value="z">Z-score</option>
+                        <option value="mad">MAD</option>
+                    </select>
+                </div>
+                <div class="col">
+                    <label>Agrupar por</label>
+                    <select id="group_col">
+                        <option value="estructuraalumno" selected>estructuraalumno</option>
+                        <option value="semestre">semestre</option>
+                    </select>
+                </div>
+                <div class="col">
+                    <label>Métrica</label>
+                    <select id="metric_choice">
+                        <option value="__tasa__" selected>__tasa__</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="accordion">
+                <div class="accordion-header" onclick="toggleAccordion('params')">Parámetros avanzados</div>
+                <div class="accordion-content" id="params">
+                    <div class="row">
+                        <div class="col"><label>k (IQR)</label><input type="range" id="k_iqr" min="0.5" max="3.0" step="0.1" value="1.5"></div>
+                        <div class="col"><label>Z-threshold</label><input type="range" id="z_thr" min="1.5" max="4.0" step="0.1" value="2.5"></div>
+                        <div class="col"><label>MAD-threshold</label><input type="range" id="mad_thr" min="2.0" max="6.0" step="0.1" value="3.5"></div>
+                        <div class="col"><label>Mínimo n por grupo</label><input type="range" id="min_n" min="5" max="200" step="5" value="30"></div>
+                        <div class="col"><label>IsolationForest (fracción)</label><input type="range" id="iso_frac" min="0.0" max="0.10" step="0.005" value="0.02"></div>
+                    </div>
+                </div>
+            </div>
+
+            <button type="button" id="analyzeBtn">Analizar CSV</button>
+        </form>
+
+        <h3>1) Vista rápida del dataset</h3>
+        <div id="headTable" class="table-container"></div>
+        <div id="schemaTable" class="table-container"></div>
+
+        <h3>2) Anomalías detectadas</h3>
+        <div id="anomTable" class="table-container"></div>
+        <div id="isoTable" class="table-container"></div>
+
+        <h2>🎞️ Generar <strong>Secuencia Nativa (6 pasos)</strong></h2>
+        
+        <div class="row">
+            <div class="col">
+                <label>Tema visual</label>
+                <select id="seq_theme">
+                    <option value="light" selected>Light (Fondo Blanco)</option>
+                    <option value="black-orange">Negro y Naranja</option>
+                    <option value="midnight">Midnight</option>
+                    <option value="teal-dark">Teal Dark</option>
+                    <option value="indigo">Indigo</option>
+                </select>
+            </div>
+            <div class="col">
+                <label><input type="checkbox" id="seq_simple" checked> Modo 'niño de 5 años'</label>
+            </div>
+            <div class="col">
+                <label>Top N</label>
+                <input type="range" id="seq_topn" min="3" max="20" value="8">
+            </div>
+            <div class="col">
+                <label><input type="checkbox" id="seq_norm"> Normalizar a %</label>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col"><label>Líneas · Eje X</label><input type="text" id="seq_line_x" value="semestre"></div>
+            <div class="col"><label>Líneas · Eje Y</label><input type="text" id="seq_line_y" value="__tasa__"></div>
+            <div class="col"><label>Heatmap · Fila</label><input type="text" id="seq_hm_row" value="estructuraalumno"></div>
+            <div class="col"><label>Heatmap · Columna</label><input type="text" id="seq_hm_col" value="semestre"></div>
+        </div>
+        <div class="row">
+            <div class="col"><label>Título principal</label><input type="text" id="seq_title" value="Rendimiento Académico"></div>
+            <div class="col"><label>Subtítulo</label><input type="text" id="seq_subt" value="Secuencia de comprensión visual"></div>
+        </div>
+        <button type="button" id="generateSeqBtn">Generar Secuencia Nativa</button>
+        <div id="seqGallery"></div>
+        <div id="seqLog" class="markdown"></div>
+
+        <h2>🧠 Generar historia narrativa</h2>
+        <button type="button" id="generateStoryBtn">Generar Insights</button>
+        <div id="storyMd" class="markdown"></div>
+        
+        <h2>🎨 Plantillas individuales (opcional)</h2>
+        <div class="row">
+            <div class="col">
+                <label>Tipos de gráfico a generar</label>
+                <div class="checkbox-group">
+                    <label><input type="checkbox" name="tpl_chart_types" value="Barras" checked> Barras</label>
+                    <label><input type="checkbox" name="tpl_chart_types" value="Pastel" checked> Pastel</label>
+                    <label><input type="checkbox" name="tpl_chart_types" value="Líneas"> Líneas</label>
+                    <label><input type="checkbox" name="tpl_chart_types" value="Heatmap" checked> Heatmap</label>
+                    <label><input type="checkbox" name="tpl_chart_types" value="Violín"> Violín</label>
+                    <label><input type="checkbox" name="tpl_chart_types" value="Montaña"> Montaña</label>
+                </div>
+            </div>
+            <div class="col">
+                <label>Tema visual</label>
+                <select id="tpl_theme">
+                    <option value="midnight" selected>Midnight</option>
+                    <option value="teal-dark">Teal Dark</option>
+                    <option value="indigo">Indigo</option>
+                    <option value="light">Light</option>
+                    <option value="black-orange">Negro y Naranja</option>
+                </select>
+                <label><input type="checkbox" id="tpl_simple" checked> Modo 'niño de 5 años'</label>
+                <label><input type="checkbox" id="tpl_norm"> Normalizar a % (Barras/Pastel)</label>
+            </div>
+            <div class="col">
+                <label>Top N</label>
+                <input type="range" id="tpl_topn" min="3" max="20" value="8">
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col"><label>Agrupar por (Barras/Pastel/Violín)</label><input type="text" id="tpl_group_col" value="estructuraalumno"></div>
+            <div class="col"><label>Métrica (o __tasa__)</label><input type="text" id="tpl_metric_col" value="__tasa__"></div>
+        </div>
+        <div class="row">
+            <div class="col"><label>Líneas · Eje X</label><input type="text" id="tpl_line_x" value="semestre"></div>
+            <div class="col"><label>Líneas · Eje Y</label><input type="text" id="tpl_line_y" value="__tasa__"></div>
+            <div class="col"><label>Heatmap · Fila</label><input type="text" id="tpl_hm_row" value="estructuraalumno"></div>
+            <div class="col"><label>Heatmap · Columna</label><input type="text" id="tpl_hm_col" value="semestre"></div>
+        </div>
+        <div class="row">
+            <div class="col"><label>Título principal</label><input type="text" id="tpl_title" value="Rendimiento Académico"></div>
+            <div class="col"><label>Subtítulo</label><input type="text" id="tpl_subtitle" value="Resumen visual desde dataset"></div>
+        </div>
+
+        <button type="button" id="generateTplBtn">Generar plantillas individuales</button>
+        <div id="tplGallery"></div>
+        <div id="tplLog" class="markdown"></div>
+
+        <div class="row">
+            <button type="button" id="downloadZipBtn">⬇️ Descargar todas las infografías (ZIP)</button>
+        </div>
+    </div>
+
+    <div id="lightboxOverlay">
+        <span id="lightboxClose">&times;</span>
+        <div id="lightboxContent">
+            <img id="lightboxImage" src="" alt="Vista ampliada">
+            <div id="lightboxCaption"></div>
+        </div>
+    </div>
+
+</body>
+</html>
