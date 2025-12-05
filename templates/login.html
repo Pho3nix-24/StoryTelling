@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acceso | CENTRO AI</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="/static/js/scripts.js"></script>
+    <style>
+        /* Estilos específicos para la página de login/register */
+        .login-body {
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' width='100' height='100'%3E%3Ctext x='10' y='100' fill='%23ffa500' font-size='20' font-family='Inter, sans-serif' opacity='.02' transform='rotate(-20)'%3ECENTRO%3C/text%3E%3Ctext x='60' y='50' fill='%23ffa500' font-size='20' font-family='Inter, sans-serif' opacity='.02' transform='rotate(10)'%3ECENTRO%3C/text%3E%3C/svg%3E");
+            background-size: 100px 100px;
+        }
+        
+        .login-box {
+            width: 90%;
+            max-width: 400px;
+            padding: 40px;
+            background: #242424; 
+            border-radius: 12px;
+            box-shadow: 0 0 25px rgba(255, 165, 0, 0.5); 
+            border: 1px solid #444;
+            animation: fadeInScale 0.5s ease-out;
+            box-sizing: border-box;
+        }
+
+        .toggle-mode {
+            display: flex;
+            margin-bottom: 20px;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid #444;
+        }
+        .toggle-mode button {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            background-color: #333;
+            color: #e0e0e0;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s;
+            text-transform: uppercase;
+            font-weight: 500;
+        }
+        .toggle-mode button.active {
+            background-color: #ffa500;
+            color: #000;
+            font-weight: bold;
+        }
+        .toggle-mode button:hover:not(.active) {
+            background-color: #444;
+        }
+
+        .login-box h1 {
+            text-align: center;
+            color: #ffa500;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #ffa500;
+            padding-bottom: 10px;
+            font-size: 1.8em;
+        }
+
+        .login-error {
+            background-color: #331111;
+            color: #ff8a8a;
+            border: 1px solid #ff8a8a;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        /* Estilo para mensajes de éxito */
+        .login-success { 
+            background-color: #113311;
+            color: #a5ffa5;
+            border: 1px solid #a5ffa5;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        #registerForm {
+            display: none;
+        }
+        @keyframes fadeInScale {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+    </style>
+</head>
+<body class="login-body">
+    <div class="login-box">
+        <h1 id="form-title">🔐 Iniciar Sesión</h1>
+
+        <div class="toggle-mode">
+            <button id="show-login-btn" class="active" data-mode="login">Entrar</button>
+            <button id="show-register-btn" data-mode="register">Registrarse</button>
+        </div>
+
+        <div id="error-message" class="login-error" style="display: none;"></div>
+
+        <!-- FORMULARIO DE LOGIN -->
+        <form id="loginForm" method="POST">
+            <label for="login-username">Usuario</label>
+            <input type="text" id="login-username" name="username" placeholder="Tu nombre de usuario" required autofocus>
+
+            <label for="login-password">Contraseña</label>
+            <input type="password" id="login-password" name="password" placeholder="Contraseña" required>
+
+            <button type="submit">Iniciar Sesión</button>
+        </form>
+
+        <!-- FORMULARIO DE REGISTRO (Oculto por defecto) -->
+        <form id="registerForm">
+            <label for="register-username">Nuevo Usuario</label>
+            <input type="text" id="register-username" name="username" placeholder="Elige un nombre de usuario" required>
+
+            <label for="register-password">Crear Contraseña</label>
+            <input type="password" id="register-password" name="password" placeholder="Mínimo 6 caracteres" required>
+
+            <button type="submit" id="registerBtn">Crear Cuenta</button>
+        </form>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            const $loginForm = $('#loginForm');
+            const $registerForm = $('#registerForm');
+            const $title = $('#form-title');
+            const $error = $('#error-message');
+            const $toggleButtons = $('.toggle-mode button');
+
+            // --- FUNCIÓN PARA MOSTRAR MENSAJES (ERROR/ÉXITO) ---
+            function displayMessage(message, isSuccess = false) {
+                $error.text(message)
+                    .removeClass('login-error login-success')
+                    .addClass(isSuccess ? 'login-success' : 'login-error')
+                    .show()
+                    .css('opacity', 0)
+                    .fadeTo(400, 1);
+            }
+
+            // --- FUNCIÓN PARA CAMBIAR EL MODO (LOGIN/REGISTER) ---
+            $toggleButtons.on('click', function() {
+                const mode = $(this).data('mode');
+                $toggleButtons.removeClass('active');
+                $(this).addClass('active');
+                $error.hide(); 
+
+                if (mode === 'login') {
+                    $title.text('🔐 Iniciar Sesión');
+                    $registerForm.slideUp(200, function() {
+                        $loginForm.slideDown(200);
+                        $('#login-username').focus();
+                    });
+                    // Asegura que el action de login sea POST a /login
+                    $loginForm.attr('action', '/login').attr('method', 'POST');
+                } else {
+                    $title.text('✍️ Registrar Usuario');
+                    $loginForm.slideUp(200, function() {
+                        $registerForm.slideDown(200);
+                        $('#register-username').focus();
+                    });
+                }
+            });
+            
+            // Si hay un error pasado por Flask (ej. después de un intento fallido de POST/login)
+            if ("{{ error }}" && "{{ error }}" !== "None") {
+                 displayMessage("{{ error }}", false);
+                 // Forzar la vista de login en caso de error de error
+                 $('#show-login-btn').click(); 
+                 // Asegurar que el formulario de login esté visible al cargar
+                 $registerForm.hide();
+                 $loginForm.show();
+            }
+
+
+            // --- MANEJO DEL REGISTRO (AJAX) ---
+            $registerForm.on('submit', function(e) {
+                e.preventDefault();
+                const username = $('#register-username').val();
+                const password = $('#register-password').val();
+
+                if (!username || !password) {
+                    displayMessage("Usuario y contraseña son requeridos.", false);
+                    return;
+                }
+
+                $('#registerBtn').text('Creando...').prop('disabled', true);
+
+                $.ajax({
+                    url: '/register',
+                    type: 'POST',
+                    data: { username: username, password: password },
+                    success: function(response) {
+                        // 1. Muestra el mensaje de éxito profesional
+                        displayMessage('✅ Registro exitoso. Iniciando sesión...', true);
+                        
+                        // 2. Redirige después de un breve momento
+                        setTimeout(function() {
+                            window.location.href = response.redirect_url;
+                        }, 1500); 
+                    },
+                    error: function(jqXHR) {
+                        const response = jqXHR.responseJSON || { error: 'Error desconocido al registrar.' };
+                        displayMessage(response.error, false); 
+                        $('#registerBtn').text('Crear Cuenta').prop('disabled', false);
+                    }
+                });
+            });
+
+            // --- MANEJO DE LOGIN (POST estándar) ---
+            // Login usa el formulario estándar POST para /login (ya configurado)
+        });
+    </script>
+</body>
+</html>

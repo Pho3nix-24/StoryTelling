@@ -5,7 +5,7 @@ from scipy.stats import gaussian_kde
 import pandas as pd
 import numpy as np
 import io
-import copy # <--- Necesario para la corrección del heatmap
+import copy
 from PIL import Image, ImageDraw, ImageFont
 
 # Importa THEMES y OUTPUT_DIR desde tu config
@@ -27,7 +27,7 @@ try:
     PIL_FONT_SUBTITLE = ImageFont.truetype("Arial.ttf", 30)
     PIL_FONT_FOOTER = ImageFont.truetype("Arial.ttf", 22)
 except IOError:
-    print("Advertencia: Arial.ttf no encontrada. Usando fuente por defecto de PIL.")
+    # Aviso si no se encuentra la fuente
     PIL_FONT_TITLE = ImageFont.load_default()
     PIL_FONT_SUBTITLE = ImageFont.load_default()
     PIL_FONT_FOOTER = ImageFont.load_default()
@@ -63,6 +63,7 @@ def _draw_footer(draw, colors, footer, width=1600, height=900, pad=28):
         tw = bbox[2] - bbox[0]
         th = bbox[3] - bbox[1]
     except AttributeError:
+        # Fallback para versiones antiguas de PIL
         tw, th = draw.textsize(footer, font=PIL_FONT_FOOTER)
     draw.text((width - tw - pad, height - th - pad), footer, fill=colors["muted"], font=PIL_FONT_FOOTER)
 
@@ -76,40 +77,60 @@ def _paste_plot_on_canvas(fig, canvas_img, bbox=(80, 180, 1520, 820), dpi=100): 
     frame = Image.new("RGBA",(w,h),(0,0,0,0)); frame.paste(plot_img,(0,0),plot_img)
     canvas_img.paste(frame,(x1,y1),frame); return canvas_img
 
-def _bubble(ax, xy, text, xytext, color="lightgreen", textcoords="axes fraction"):
+def _bubble(ax, xy, text, xytext, color="#CDEEDC", textcoords="axes fraction", fontsize=10):
     ax.annotate(text, xy=xy, xytext=xytext,
         textcoords=textcoords,
         arrowprops=dict(arrowstyle="->", lw=2, color="black"),
         bbox=dict(boxstyle="round,pad=0.5", fc=color, ec="black", alpha=0.9),
-        fontsize=10) 
+        fontsize=fontsize,
+        fontweight='bold') 
 
 # --------------------------------------------------------------------------------------------------
-# FUNCIONES DE GRÁFICOS (Con corrección de heatmap)
+# FUNCIONES DE GRÁFICOS (Actualizadas con lógica IA didáctica)
 # --------------------------------------------------------------------------------------------------
 
 def chart_bar(g_series, theme="light", ylabel="", simple=False):
     colors = THEMES.get(theme, THEMES["light"])
     fig = plt.figure(figsize=(10,6), facecolor=_to_rgb01(colors["bg"])); ax = fig.add_subplot(111)
     ax.set_facecolor(_to_rgb01(colors["bg"]))
-    bars = ax.bar(g_series.index.astype(str), g_series.values, color=_to_rgb01(colors["accent"]))
     
-    ax.tick_params(axis='x', labelrotation=45, labelsize=9)
+    # Usar un color secundario para los bordes si es modo oscuro
+    edge_color = _to_rgb01(colors["fg"]) if theme == 'light' else _to_rgb01(colors["muted"])
+    
+    bars = ax.bar(g_series.index.astype(str), g_series.values, 
+                  color=_to_rgb01(colors["accent"]),
+                  edgecolor=edge_color, # Borde sutil
+                  linewidth=1)
+    
+    # Estilos de ejes y ticks
+    ax.tick_params(axis='x', labelrotation=45, labelsize=9, colors=_to_rgb01(colors["fg"]))
     plt.setp(ax.get_xticklabels(), ha="right", rotation_mode="anchor") 
-    
     ax.tick_params(axis='y', colors=_to_rgb01(colors["fg"]), labelsize=10)
     ax.spines['bottom'].set_color(_to_rgb01(colors["muted"])); ax.spines['left'].set_color(_to_rgb01(colors["muted"]))
     ax.set_ylabel(ylabel, color=_to_rgb01(colors["fg"]))
+    
+    # Etiquetas de valor en las barras
     for b in bars:
         v = b.get_height()
         ax.text(b.get_x()+b.get_width()/2, v, f"{v:,.2f}", ha="center", va="bottom",
                 color=_to_rgb01(colors["fg"]), fontsize=12, fontweight="bold")
+    
+    # LÓGICA DE LA IA (Burbujas explicativas)
     if simple and len(bars)>0:
         bmax = max(bars, key=lambda b: b.get_height())
         bmin = min(bars, key=lambda b: b.get_height())
+        
+        # Burbuja para el Máximo (mejor rendimiento) - HECHO DINÁMICO
         _bubble(ax, (bmax.get_x()+bmax.get_width()/2, bmax.get_height()),
-                "Mira: barra más alta = mejor", (0.05, 0.95), color="#CDEEDC")
-        _bubble(ax, (bmin.get_x()+bmin.get_width()/2, bmin.get_height()),
-                "Barra chiquita = más bajo", (0.6, 0.15), color="#FFE8C7")
+                f"Más Alto: {ylabel} (Mejor)", (0.05, 0.95), 
+                color="#A5FFA5", fontsize=12) # Color verde claro/éxito
+        
+        # Burbuja para el Mínimo (peor rendimiento), solo si no son iguales - HECHO DINÁMICO
+        if bmax != bmin:
+            _bubble(ax, (bmin.get_x()+bmin.get_width()/2, bmin.get_height()),
+                    f"Más Bajo: {ylabel} (Revisar)", (0.6, 0.15), 
+                    color="#FFC7C7", fontsize=12) # Color rojo claro/advertencia
+            
     fig.tight_layout(); return fig
 
 def chart_pie(g_series, theme="light", simple=False):
@@ -120,23 +141,34 @@ def chart_pie(g_series, theme="light", simple=False):
     fig = plt.figure(figsize=(10,8), facecolor=_to_rgb01(colors["bg"])); ax = fig.add_subplot(111) 
     ax.set_facecolor(_to_rgb01(colors["bg"]))
     
+    # 1. Obtener colores del colormap 'Spectral' (o cualquier otro)
+    color_map = plt.cm.get_cmap('Spectral')
+    color_list = [color_map(i) for i in np.linspace(0, 1, len(g_series))]
+    
     if g_series.sum() > 0:
         perc = g_series / g_series.sum()
+        # Agrupa slices pequeños para mayor legibilidad
         small_slices = perc[(perc < 0.03) | (perc.rank(ascending=False) > 7)] 
         if not small_slices.empty:
             main_slices = g_series.drop(small_slices.index)
             otros_sum = g_series[small_slices.index].sum()
             if not main_slices.empty:
                 g_series = pd.concat([main_slices, pd.Series([otros_sum], index=['Otros'])])
-    
+                # Ajusta la lista de colores al nuevo tamaño de la serie agrupada
+                color_list = color_list[:len(main_slices)] + [_to_rgb01(colors["muted"])]
+
+
     vals = g_series.values; labels = g_series.index.astype(str)
 
+    # 2. Pasar la lista de colores a la función pie()
     wedges, texts, autotexts = ax.pie(vals, 
                                       autopct=lambda p: f"{p:.1f}%" if p > 3 else '', 
                                       textprops={'color': _to_rgb01(colors["fg"])},
                                       pctdistance=0.85, 
-                                      wedgeprops={'linewidth':1,'edgecolor':_to_rgb01(colors["bg"])})
+                                      wedgeprops={'linewidth':1,'edgecolor':_to_rgb01(colors["bg"])},
+                                      colors=color_list) # <-- CORREGIDO: Usa 'colors' en lugar de 'cmap'
     
+    # Estilo de texto dentro de las rebanadas
     for t in autotexts: 
         t.set_color(_to_rgb01(colors["bg"]) if theme == "light" else _to_rgb01(colors["fg"]))
         t.set_fontsize(9); 
@@ -144,15 +176,29 @@ def chart_pie(g_series, theme="light", simple=False):
 
     ax.axis('equal')
     
+    # Leyenda mejorada
     ax.legend(wedges, labels,
               title="Categorías",
               loc="center left",
               bbox_to_anchor=(0.9, 0, 0.5, 1), 
-              fontsize=10)
+              fontsize=10,
+              # Estilo de leyenda para modo oscuro
+              labelcolor=_to_rgb01(colors["fg"]),
+              frameon=False, 
+              title_fontsize=12)
     
+    # LÓGICA DE LA IA (Burbuja explicativa)
     if simple and len(vals)>0:
-        _bubble(ax, (0,0), "Pedazo más grande = más parte del pastel", (0.5, 0.5), color="#DDEBFF", textcoords="data")
-
+        max_idx = np.argmax(vals)
+        # Coordenadas polares del pedazo más grande (para el centro)
+        center_x = (wedges[max_idx].center[0] * 0.5)
+        center_y = (wedges[max_idx].center[1] * 0.5)
+        
+        # Posiciona la burbuja cerca del centro del gráfico
+        _bubble(ax, (center_x, center_y), 
+                "Pedazo Más Grande = Mayor Proporción", 
+                (0.5, 0.5), color="#DDEBFF", fontsize=12) # Color azul claro
+        
     fig.tight_layout(rect=[0, 0, 0.75, 1]);
     return fig
 
@@ -160,31 +206,49 @@ def chart_line(df, x_col, y_col, theme="light", simple=False):
     colors = THEMES.get(theme, THEMES["light"])
     fig = plt.figure(figsize=(10,6), facecolor=_to_rgb01(colors["bg"])); ax = fig.add_subplot(111)
     ax.set_facecolor(_to_rgb01(colors["bg"]))
+    
+    # 1. Agregación de datos (agrupando por X y promediando Y)
     x = _ensure_num(df[x_col]); y = _ensure_num(df[y_col])
     m = pd.DataFrame({x_col:x, y_col:y}).dropna().groupby(x_col)[y_col].mean().reset_index()
     
     if m.empty: return fig
 
-    ax.plot(m[x_col], m[y_col], marker="o", linewidth=3, color=_to_rgb01(colors["accent"]))
+    # 2. Plotting
+    ax.plot(m[x_col], m[y_col], marker="o", linewidth=3, 
+            color=_to_rgb01(colors["accent"]), 
+            markersize=8, markeredgecolor=_to_rgb01(colors["fg"]))
+    
+    # 3. Estilos de ejes (Ya usa las variables de columna)
     ax.set_xlabel(x_col, color=_to_rgb01(colors["fg"])); ax.set_ylabel(y_col, color=_to_rgb01(colors["fg"]))
     ax.tick_params(colors=_to_rgb01(colors["fg"]), labelsize=10)
     ax.spines['bottom'].set_color(_to_rgb01(colors["muted"])); ax.spines['left'].set_color(_to_rgb01(colors["muted"]))
-    if simple and len(m)>2:
+    
+    # 4. LÓGICA DE LA IA (Burbujas explicativas)
+    if simple and len(m)>1:
         i_max = m[y_col].idxmax(); i_min = m[y_col].idxmin()
-        _bubble(ax, (m.loc[i_max,x_col], m.loc[i_max,y_col]), "Punto más alto (mejor)", (0.1, 0.8), color="#FFF0B3")
-        _bubble(ax, (m.loc[i_min,x_col], m.loc[i_min,y_col]), "Punto más bajo", (0.5, 0.2), color="#FFD7E6")
+        
+        # Burbuja Máximo (Punto más alto/mejor)
+        _bubble(ax, (m.loc[i_max,x_col], m.loc[i_max,y_col]), 
+                f"Punto Alto: {m.loc[i_max,x_col]}", (0.1, 0.8), 
+                color="#FFF0B3", fontsize=12)
+        
+        # Burbuja Mínimo (Punto más bajo/peor)
+        if i_max != i_min:
+            _bubble(ax, (m.loc[i_min,x_col], m.loc[i_min,y_col]), 
+                    f"Punto Bajo: {m.loc[i_min,x_col]}", (0.6, 0.2), 
+                    color="#FFD7E6", fontsize=12)
+            
     fig.tight_layout(); return fig
 
 def chart_heatmap(df, row_col, col_col, metric_col, theme="light", simple=False):
     colors = THEMES.get(theme, THEMES["light"])
     try:
-        # --- ¡INICIO CORRECCIÓN HEATMAP (image_a61db9.jpg)! ---
         # 1. Rellena con NaN (invisible) en lugar de 0.0 (morado)
         pivot = (df[[row_col, col_col, metric_col]]
                  .assign(**{metric_col: _ensure_num(df[metric_col])})
                  .dropna()
                  .groupby([row_col, col_col])[metric_col].mean()
-                 .unstack(col_col).fillna(np.nan)) # <--- CORREGIDO
+                 .unstack(col_col).fillna(np.nan))
     except Exception:
         fig, ax = plt.subplots(); return fig
 
@@ -195,7 +259,6 @@ def chart_heatmap(df, row_col, col_col, metric_col, theme="light", simple=False)
     ax.set_facecolor(_to_rgb01(colors["bg"]))
     
     # 2. Copia el colormap y le dice que pinte los NaN (vacíos)
-    #    con el mismo color del fondo, haciéndolos invisibles.
     my_cmap = copy.copy(plt.get_cmap('viridis'))
     my_cmap.set_bad(color=_to_rgb01(colors["bg"]))
     
@@ -229,18 +292,16 @@ def chart_heatmap(df, row_col, col_col, metric_col, theme="light", simple=False)
         for i in range(n_rows):
             for j in range(n_cols):
                 val = pivot.values[i,j]
-                if pd.notna(val): # Solo dibuja texto si NO es NaN
+                if pd.notna(val):
                     text_color = "black" if val > np.nanmean(pivot.values) else "white"
                     ax.text(j, i, f"{val:.2f}", ha="center", va="center", color=text_color, fontsize=font_size, fontweight="bold")
     
-    # --- 3. CORRECCIÓN BURBUJAS (No más "alucinaciones") ---
+    # --- 3. LÓGICA DE LA IA (Burbujas explicativas) ---
     if simple:
         try:
-            # Encuentra min/max real, ignorando los NaN
             max_val = np.nanmax(pivot.values)
             min_val = np.nanmin(pivot.values)
             
-            # Encuentra sus coordenadas (y, x)
             max_coords = np.unravel_index(np.nanargmax(pivot.values), pivot.shape)
             min_coords = np.unravel_index(np.nanargmin(pivot.values), pivot.shape)
             
@@ -249,17 +310,14 @@ def chart_heatmap(df, row_col, col_col, metric_col, theme="light", simple=False)
             
             # Apunta la burbuja al dato MÁXIMO real
             _bubble(ax, (max_x, max_y), f"Más clarito = más alto\n(Valor: {max_val:.2f})", 
-                    (0.3, 0.1), color="#EAF6FF")
+                    (0.3, 0.1), color="#EAF6FF", fontsize=12)
             
             # Apunta la burbuja al dato MÍNIMO real (si es diferente)
             if max_val != min_val:
                 _bubble(ax, (min_x, min_y), f"Más oscuro = más bajo\n(Valor: {min_val:.2f})", 
-                        (0.6, 0.8), color="#FFE6EE")
-        except Exception as e:
-            # Fallback si todos los valores son NaN (tabla vacía)
-            print(f"Error en burbuja de heatmap: {e}")
-            _bubble(ax, (0,0), "No se pudieron calcular burbujas", (0.3, 0.1), color="#EAF6FF")
-    # --- FIN CORRECCIÓN HEATMAP ---
+                        (0.6, 0.8), color="#FFE6EE", fontsize=12)
+        except Exception:
+            _bubble(ax, (0,0), "No se pudieron calcular burbujas", (0.3, 0.1), color="#EAF6FF", fontsize=12)
             
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04); cbar.set_label("Valor medio", rotation=90)
     
@@ -283,20 +341,43 @@ def chart_violin(df, group_col, metric_col, theme="light", simple=False, top_n=8
     data_to_plot = [df_plot[df_plot[group_col] == g][metric_col].values for g in means.index]
 
     vp = ax.violinplot(data_to_plot, showmeans=False, showmedians=True, showextrema=False)
+    
+    # Estilo de violín
     for i, b in enumerate(vp['bodies']): 
         b.set_facecolor(_to_rgb01(colors["accent"])); b.set_alpha(0.85)
-    vp['cmedians'].set_color('k')
+    vp['cmedians'].set_color('k') # Línea de la mediana en negro
 
     ax.set_xticks(range(1, len(means.index)+1)); 
     ax.set_xticklabels(means.index.astype(str), rotation=45, ha="right", color=_to_rgb01(colors["fg"]), fontsize=9)
     
-    ax.set_ylabel(metric_col, color=_to_rgb01(colors["fg"]))
+    ax.set_ylabel(metric_col, color=_to_rgb01(colors["fg"])) # Ya usa la métrica
     ax.tick_params(axis='y', colors=_to_rgb01(colors["fg"]))
+    ax.spines['bottom'].set_color(_to_rgb01(colors["muted"])); ax.spines['left'].set_color(_to_rgb01(colors["muted"]))
     
+    # LÓGICA DE LA IA (Burbujas explicativas)
     if simple and len(data_to_plot)>0 and len(data_to_plot[0]) > 0:
-        _bubble(ax, (1, float(np.median(data_to_plot[0]))), "Bolsita gordita arriba: muchos aprueban", (0.1, 0.9), color="#DFFFE2")
-        if len(data_to_plot) > 1 and len(data_to_plot[-1]) > 0:
-             _bubble(ax, (len(data_to_plot), float(np.median(data_to_plot[-1]))), "Punta abajo: más bajitos", (0.7, 0.1), color="#FFEBD1")
+        
+        # Encontrar el grupo con mayor dispersión (más "gordito")
+        stds = [np.std(data) for data in data_to_plot if len(data) > 1]
+        if stds:
+            max_std_idx = np.argmax(stds)
+            max_std_median = np.median(data_to_plot[max_std_idx])
+            
+            # Mayor dispersión (Bolita gordita arriba)
+            _bubble(ax, (max_std_idx + 1, float(max_std_median)), 
+                    "Mayor Dispersión (Mucha variabilidad)", (0.1, 0.9), 
+                    color="#DFFFE2", fontsize=12)
+            
+        # Encontrar el grupo con menor mediana (Punta abajo: más bajitos)
+        medians = [np.median(data) for data in data_to_plot if len(data) > 0]
+        if medians:
+            min_median_idx = np.argmin(medians)
+            min_median_val = medians[min_median_idx]
+            
+            # El peor rendimiento (Punta abajo: más bajitos) - TEXTO MODIFICADO
+            _bubble(ax, (min_median_idx + 1, float(min_median_val)), 
+                    f"Peor Mediana de {metric_col} (Revisar)", (0.7, 0.1), 
+                    color="#FFEBD1", fontsize=12)
     
     fig.tight_layout(); return fig
 
@@ -321,14 +402,16 @@ def chart_montana(df, metric_col, theme="light", simple=False):
     ecdf_x = np.sort(vals); ecdf_y = np.arange(1, len(vals)+1)/len(vals)
     
     ax1.fill_between(xs, ys, alpha=0.35, step='pre', color=_to_rgb01(colors["accent"]))
-    ax1.plot(xs, ys, linewidth=3, label="Montón de estudiantes", color=_to_rgb01(colors["accent"]))
-    ax1.set_ylabel("¿Cuánta gente hay? (altura del montón)", color=_to_rgb01(colors["fg"]))
+    # TEXTO MODIFICADO
+    ax1.plot(xs, ys, linewidth=3, label=f"Distribución de valores de {metric_col}", color=_to_rgb01(colors["accent"]))
+    # TEXTO MODIFICADO
+    ax1.set_ylabel(f"Densidad de {metric_col}", color=_to_rgb01(colors["fg"]))
     ax1.tick_params(axis='y', colors=_to_rgb01(colors["accent"]))
     ax1.tick_params(axis='x', colors=_to_rgb01(colors["fg"]))
     ax1.spines['bottom'].set_color(_to_rgb01(colors["muted"])); ax1.spines['left'].set_color(_to_rgb01(colors["muted"]))
 
     ax2 = ax1.twinx()
-    ax2.plot(ecdf_x, ecdf_y, color="orange", linewidth=3, label="% que ya pasamos")
+    ax2.plot(ecdf_x, ecdf_y, color="orange", linewidth=3, label="% acumulado")
     ax2.set_ylabel("% acumulado", color="orange")
     ax2.tick_params(axis='y', colors="orange")
     ax2.spines['right'].set_color("orange"); 
@@ -344,7 +427,8 @@ def chart_montana(df, metric_col, theme="light", simple=False):
     if simple:
         _bubble(ax1, (med, max(ys)*0.8), "Esta línea es la mitad (50%)", (0.1, 0.9), color="#E6F4FF")
         p90 = np.percentile(vals,90)
-        _bubble(ax2, (p90, 0.9), "Aquí están los mejores 10%", (0.7, 0.4), color="#EAFBEA")
+        # TEXTO MODIFICADO
+        _bubble(ax2, (p90, 0.9), f"El 10% más alto de {metric_col}", (0.7, 0.4), color="#EAFBEA")
     
     fig.tight_layout(); return fig
 

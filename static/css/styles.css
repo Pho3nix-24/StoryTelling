@@ -1,7 +1,8 @@
 /* --- ESTILO BASE MEJORADO --- */
 body {
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
-    margin: 20px;
+    margin: 0;
+    padding: 0;
     background-color: #1a1a1a; 
     color: #e0e0e0; 
     line-height: 1.6;
@@ -39,16 +40,170 @@ h1 strong {
     font-weight: 500; 
 }
 
+/* --- LAYOUT PRINCIPAL (SIDEBAR + CONTENT) --- */
+.app-container {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* --- SIDEBAR (MENÚ ESTILO JULIUS AI) --- */
+.nav-sidebar {
+    width: 280px;
+    background-color: #111111; /* Un tono más oscuro que el fondo principal */
+    box-shadow: 2px 0 15px rgba(0, 0, 0, 0.7);
+    padding: 20px 0;
+    display: flex;
+    flex-direction: column;
+    position: fixed; 
+    top: 0;
+    left: 0;
+    height: 100%;
+    z-index: 100;
+    box-sizing: border-box;
+}
+
+.sidebar-header {
+    text-align: center;
+    padding: 0 20px 20px;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #333;
+}
+
+.sidebar-header h2 {
+    font-size: 1.5em;
+    margin: 0;
+    border-bottom: none;
+    padding-bottom: 0;
+    color: #ffa500;
+}
+
+.sidebar-header p {
+    color: #888;
+    margin: 5px 0 0;
+    font-size: 0.9em;
+}
+
+.sidebar-menu {
+    flex-grow: 1;
+    padding: 0 15px;
+    overflow-y: auto;
+}
+
+.menu-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 15px;
+    margin-bottom: 5px;
+    color: #e0e0e0;
+    text-decoration: none;
+    border-radius: 8px;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    font-weight: 500;
+}
+
+.menu-item .icon {
+    margin-right: 15px;
+    font-size: 1.2em;
+}
+
+.menu-item:hover:not(.active) {
+    background-color: #2a2a2a;
+    color: #ff8c00;
+}
+
+.menu-item.active {
+    background-color: #ffa500;
+    color: #000;
+    font-weight: bold;
+    box-shadow: 0 2px 8px rgba(255, 165, 0, 0.3);
+}
+
+.menu-item.logout {
+    color: #ff8a8a;
+}
+.menu-item.logout:hover {
+    background-color: #331111;
+    color: #ff8a8a;
+}
+.sidebar-menu hr {
+    border: 0;
+    border-top: 1px solid #333;
+    margin: 15px 0;
+}
+
+.sidebar-footer {
+    padding: 20px;
+    border-top: 1px solid #333;
+    text-align: center;
+    /* Ocultar el pie de página ya que el botón de descarga se movió */
+    display: none; 
+}
+
+/* --- MAIN CONTENT AREA --- */
+.main-content {
+    flex-grow: 1;
+    margin-left: 280px; /* Compensa el ancho del sidebar */
+    padding: 20px;
+}
+
 /* --- EL "BLOX" PRINCIPAL (CONTENEDOR) --- */
 .container {
     max-width: 1200px;
-    margin: auto;
+    margin: 0 auto 30px; 
     background: #242424; 
-    padding: 25px 35px;
+    padding: 30px 40px;
     border-radius: 12px;
-    box-shadow: 0 0 25px rgba(255, 165, 0, 0.35);
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
     border: 1px solid #333;
 }
+
+/* Lógica para mostrar solo la sección activa */
+.page-content {
+    display: none;
+}
+.active-page {
+    display: block;
+}
+
+/* --- LAYOUT DE DOS COLUMNAS PARA SECCIÓN IA --- */
+.story-layout {
+    display: flex;
+    gap: 20px; /* Espacio entre los dos paneles */
+}
+.story-layout .col {
+    flex: 1; /* Distribuye el espacio por igual */
+    min-width: 45%;
+}
+/* Estilo del contenedor de gráficos de soporte */
+#aiChartsGallery {
+    padding-top: 15px;
+}
+
+/* --- NUEVO: BOTÓN DE DESCARGA EN SECCIÓN IA --- */
+.download-btn-story {
+    width: 100%;
+    padding: 12px 15px; 
+    margin-bottom: 10px;
+    background-color: #333;
+    color: #ffa500;
+    border: 1px solid #ffa500;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: center;
+    text-decoration: none;
+    display: block;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: background-color 0.2s, transform 0.2s;
+}
+.download-btn-story:hover {
+    background-color: #ff8c00;
+    color: #000;
+    transform: translateY(-2px); 
+    box-shadow: 0 5px 15px rgba(255, 165, 0, 0.4);
+}
+
 
 /* --- EFECTOS EN FORMULARIOS (Inputs y Botones) --- */
 input, select, button, textarea {
@@ -131,6 +286,9 @@ button:disabled {
     background-color: #d88c00; 
     color: #000;
     font-weight: bold;
+    position: sticky; /* Fija los encabezados al hacer scroll */
+    top: 0;
+    z-index: 2;
 }
 .table tbody tr:hover {
     background-color: #3a3a3a;
@@ -181,6 +339,16 @@ button:disabled {
     color: #fff;
     box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
+.markdown h3 {
+    color: #fff; /* Título de la IA en blanco */
+    border-bottom: 1px dashed #666;
+    padding-bottom: 5px;
+}
+.markdown br {
+    display: block; /* Asegura el salto de línea para el markdown simple */
+    content: "";
+    margin-top: 5px; /* Espacio entre líneas */
+}
 
 .accordion {
     border: 1px solid #444;
@@ -220,6 +388,7 @@ button:disabled {
     align-items: center;
     gap: 5px;
     width: 45%; 
+    margin: 0; /* Reinicia el margen del label */
 }
 label input {
     width: auto; 
@@ -235,7 +404,7 @@ label input {
     border-color: #a5ffa5;
 }
 
-/* --- ¡AQUÍ ESTÁ LA CORRECCIÓN! --- */
+/* --- LIGHTBOX (Modal) --- */
 #lightboxOverlay {
     display: none; /* Oculto por defecto */
     position: fixed; 
@@ -244,12 +413,8 @@ label input {
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(26, 26, 26, 0.9); 
+    background-color: rgba(26, 26, 26, 0.95); 
     backdrop-filter: blur(5px); 
-    
-    /* Quité el 'display: flex' de aquí. 
-       El JavaScript se encarga de mostrarlo.
-    */
     align-items: center;
     justify-content: center;
     padding: 20px;
@@ -283,8 +448,8 @@ label input {
 
 #lightboxClose {
     position: absolute;
-    top: -25px;
-    right: 0px;
+    top: -30px;
+    right: 5px;
     color: #fff;
     font-size: 45px;
     font-weight: bold;
@@ -308,4 +473,51 @@ label input {
 
 .gallery-image-clickable {
     cursor: zoom-in;
+}
+
+/* --- Responsive para dispositivos móviles --- */
+@media (max-width: 768px) {
+    .app-container {
+        flex-direction: column;
+    }
+    .nav-sidebar {
+        position: relative;
+        width: 100%;
+        height: auto;
+        padding: 10px 0;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+    }
+    .main-content {
+        margin-left: 0;
+        padding: 10px;
+    }
+    .container {
+        padding: 20px;
+    }
+    .sidebar-header {
+        padding: 0 10px 10px;
+    }
+    .sidebar-menu {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        padding: 0 10px;
+        overflow-x: auto;
+    }
+    .menu-item {
+        padding: 8px 12px;
+        font-size: 0.9em;
+    }
+    .menu-item .icon {
+        margin-right: 8px;
+    }
+    .sidebar-footer {
+        display: none;
+    }
+    .checkbox-group label {
+        width: 100%;
+    }
+    .story-layout {
+        flex-direction: column;
+    }
 }

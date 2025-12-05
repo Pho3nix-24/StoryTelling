@@ -13,11 +13,10 @@ const appState = {
 
 /**
  * Genera una tabla HTML a partir de un array de objetos (de JSON)
- * Con límite de 'maxRows' para no quebrar el navegador.
  */
 function generateTable(data, targetId, maxRows = null) {
     const container = $(targetId);
-    container.empty(); // Limpiar contenido anterior
+    container.empty(); 
     
     if (!data || data.length === 0) {
         container.html('<p>(No se encontraron datos para esta sección)</p>');
@@ -27,24 +26,19 @@ function generateTable(data, targetId, maxRows = null) {
     let message = '';
     let displayData = data;
     
-    // Lógica para truncar los datos si se pasa el límite
     if (maxRows && data.length > maxRows) {
         displayData = data.slice(0, maxRows);
-        // Corregido: class="table-note"
         message = `<p class="table-note">Mostrando las primeras ${maxRows} de ${data.length} filas.</p>`;
     }
 
     let html = '<table class="table"><thead><tr>';
-    // Usar displayData para las cabeceras por si data[0] existe pero displayData no
     const headers = Object.keys(displayData[0]);
     headers.forEach(key => html += `<th>${escapeHTML(key)}</th>`);
     html += '</tr></thead><tbody>';
 
-    // Usar 'displayData' (los datos truncados) en lugar de 'data'
     displayData.forEach(row => {
         html += '<tr>';
         headers.forEach(key => {
-            // Maneja 'null' que viene del JSON (fix para el error de NaN)
             const value = row[key] === null ? '<i>null</i>' : escapeHTML(row[key]);
             html += `<td>${value}</td>`;
         });
@@ -57,9 +51,7 @@ function generateTable(data, targetId, maxRows = null) {
 
 
 /**
- * ¡MODIFICADO PARA LIGHTBOX!
  * Genera una galería de imágenes.
- * Ya no usa <a>, añade una clase 'gallery-image-clickable'
  */
 function generateGallery(data, targetId) {
     const container = $(targetId);
@@ -92,7 +84,8 @@ function generateGallery(data, targetId) {
 function showLog(message, targetId, isError = false) {
     const container = $(targetId);
     const className = isError ? 'log-error' : 'log-success';
-    container.html(`<div class="markdown ${className}">${escapeHTML(message)}</div>`);
+    // Se usa innerHTML para permitir el formato Markdown simple de la IA (como h3, strong)
+    container.html(`<div class="markdown ${className}">${message}</div>`);
 }
 
 function escapeHTML(str) {
@@ -108,24 +101,169 @@ function escapeHTML(str) {
     });
 }
 
+// Helper para actualizar las opciones de un dropdown
+function updateDropdown(selectId, options, currentValue) {
+    const $select = $(selectId);
+    $select.empty();
+    
+    if (!options || options.length === 0) {
+        $select.append($('<option>', { value: '', text: 'N/A' }));
+        return;
+    }
+    
+    if (selectId === '#metric_choice' && !options.includes('__tasa__')) {
+         options.unshift('__tasa__');
+    }
+
+    options.forEach(option => {
+        $select.append($('<option>', {
+            value: option,
+            text: option
+        }));
+    });
+    
+    if (options.includes(currentValue)) {
+        $select.val(currentValue);
+    } else {
+        $select.val(options[0]);
+    }
+}
+
+// --- FUNCIÓN CLAVE: ACTUALIZA LA VISIBILIDAD DEL BOTÓN DE DESCARGA ---
+function updateDownloadButtonVisibility() {
+    const isStorySectionActive = $('#story-section').hasClass('active-page');
+    // Chequea si existen imágenes en la galería de gráficos de IA
+    const chartsExist = $('#aiChartsGallery').find('.gallery-item').length > 0;
+    
+    if (isStorySectionActive && chartsExist) {
+        $('#downloadZipBtn').show();
+    } else {
+        $('#downloadZipBtn').hide();
+    }
+}
+// ---------------------------------------------------------------------
+
+
+// --- FUNCIÓN SECUENCIAL PARA GENERAR GRÁFICOS DE SOPORTE DE LA IA ---
+function generateAiCharts() {
+    
+    const fileInput = $('#file')[0];
+    if (fileInput.files.length === 0) {
+        showLog('Error: Archivo CSV no cargado.', '#aiChartsLog', true);
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    
+    $('#aiChartsLog').html('<p>Generando gráficos de soporte (Barra y Líneas)...</p>');
+    $('#aiChartsGallery').empty();
+    $('#downloadZipBtn').hide(); // Ocultar mientras carga
+
+    $.ajax({
+        url: '/generate_ai_charts', 
+        type: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function(data) {
+            if (data.error) {
+                showLog(data.error, '#aiChartsLog', true);
+                updateDownloadButtonVisibility();
+                return;
+            }
+            generateGallery(data, '#aiChartsGallery');
+            showLog(data.log, '#aiChartsLog');
+            
+            // *** Muestra el botón de descarga solo si se generaron gráficos ***
+            updateDownloadButtonVisibility();
+        },
+        error: function(jqXHR) {
+            showLog('Error generando gráficos de soporte: ' + (jqXHR.responseJSON ? jqXHR.responseJSON.error : jqXHR.responseText), '#aiChartsLog', true);
+            updateDownloadButtonVisibility();
+        }
+    });
+}
+// ----------------------------------------------------------------------
+
+
+// --- NUEVA FUNCIÓN: VALIDAR TIPO DE ARCHIVO ---
+function validateFile(fileInput) {
+    if (fileInput.files.length === 0) {
+        return true; // No hay archivo, no hay error.
+    }
+    const fileName = fileInput.files[0].name;
+    // Verifica si la extensión es .csv (insensible a mayúsculas/minúsculas)
+    if (!fileName.toLowerCase().endsWith('.csv')) {
+        alert('Error: Por favor, sube solo archivos CSV (.csv).');
+        // Resetea el input para que el usuario suba el archivo correcto.
+        fileInput.value = ''; 
+        // Lanza el evento change para limpiar resultados anteriores si los hubiera.
+        $(fileInput).trigger('change'); 
+        return false;
+    }
+    return true;
+}
+// ----------------------------------------------
+
+
 // ------ LÓGICA DE EVENTOS (jQuery) ------
 
 $(document).ready(function() {
 
-    // --- 0) Reseteo al cargar archivo nuevo ---
+    // Inicialmente, el botón de descarga debe estar oculto
+    $('#downloadZipBtn').hide();
+
+    // --- Validación de archivo al seleccionar ---
+    $('#file').on('change', function() {
+        validateFile(this);
+    });
+
+    // --- Lógica de Navegación del Sidebar ---
+    $('.nav-sidebar').on('click', '.menu-item', function(e) {
+        if ($(this).hasClass('logout')) {
+            return; 
+        }
+        e.preventDefault();
+
+        const targetId = $(this).attr('href');
+        
+        // 1. Manejo de visibilidad del botón de descarga al cambiar de pestaña
+        setTimeout(updateDownloadButtonVisibility, 50); 
+
+        // 2. Actualiza el ítem activo del menú
+        $('.nav-sidebar .menu-item').removeClass('active');
+        $(this).addClass('active');
+
+        // 3. Muestra/Oculta las secciones
+        $('.main-content .container').removeClass('active-page').hide();
+        $(targetId).addClass('active-page').fadeIn(400);
+
+        $('.main-content').scrollTop(0);
+    });
+
+    // --- Inicialización: Muestra la sección por defecto ---
+    $('.main-content .container').hide(); 
+    const defaultPage = $('.nav-sidebar .menu-item.active').attr('href');
+    if (defaultPage) {
+        $(defaultPage).addClass('active-page').show();
+    }
+
+
+    // --- 0) Reseteo al cargar archivo nuevo (Lado del cliente) ---
     $('#file').change(function() {
+        // Ejecuta la validación primero
+        if (!validateFile(this)) return;
+
+        // Valores por defecto
         $('#group_col').val('estructuraalumno');
         $('#metric_choice').val('__tasa__');
         $('#seq_line_x').val('semestre');
         $('#seq_line_y').val('__tasa__');
         $('#seq_hm_row').val('estructuraalumno');
         $('#seq_hm_col').val('semestre');
-        $('#tpl_group_col').val('estructuraalumno');
-        $('#tpl_metric_col').val('__tasa__');
-        $('#tpl_line_x').val('semestre');
-        $('#tpl_line_y').val('__tasa__');
-        $('#tpl_hm_row').val('estructuraalumno');
-        $('#tpl_hm_col').val('semestre');
+        
+        // Limpia resultados
         $('#headTable').empty();
         $('#schemaTable').empty();
         $('#anomTable').empty();
@@ -133,8 +271,10 @@ $(document).ready(function() {
         $('#seqGallery').empty();
         $('#seqLog').empty();
         $('#storyMd').empty();
-        $('#tplGallery').empty();
-        $('#tplLog').empty();
+        $('#aiChartsLog').empty(); 
+        $('#aiChartsGallery').html('<p>(Los gráficos se mostrarán aquí después de generar los Insights).</p>'); 
+        $('#downloadZipBtn').hide(); // OCULTAR
+        
         appState.seq_paths = [];
         appState.seq_captions = [];
         console.log('Estado reseteado por carga de nuevo archivo.');
@@ -144,8 +284,8 @@ $(document).ready(function() {
     // --- 1) Analizar CSV ---
     $('#analyzeBtn').click(function() {
         const fileInput = $('#file')[0];
-        if (fileInput.files.length === 0) {
-            alert('Por favor, sube un archivo CSV primero.');
+        if (fileInput.files.length === 0 || !validateFile(fileInput)) {
+            if (fileInput.files.length === 0) alert('Por favor, sube un archivo CSV primero.');
             return;
         }
 
@@ -176,33 +316,27 @@ $(document).ready(function() {
                 
                 generateTable(data.head, '#headTable');
                 generateTable(data.schema, '#schemaTable');
-                generateTable(data.anom, '#anomTable', 100); // Límite de 100 filas
-                generateTable(data.iso, '#isoTable', 100); // Límite de 100 filas
+                generateTable(data.anom, '#anomTable', 100); 
+                generateTable(data.iso, '#isoTable', 100); 
                 
                 updateDropdown('#group_col', data.groups, $('#group_col').val());
-                updateDropdown('#metric_choice', data.metrics, $('#metric_choice').val());
+                updateDropdown('#metric_choice', data.metrics, data.current_metric);
 
+                // Lógica de autoselección para la secuencia
                 const best_group = data.groups.length > 0 ? data.groups[0] : 'col_grupo_1';
                 const best_group_2 = data.groups.length > 1 ? data.groups[1] : best_group;
-                
-                let best_metric = '__tasa__';
-                if (data.metrics.length > 0) {
-                    best_metric = data.metrics.find(m => m !== '__tasa__') || data.metrics[0];
-                }
+                const best_metric = data.current_metric;
 
                 $('#seq_line_x').val(best_group_2); 
                 $('#seq_line_y').val(best_metric); 
                 $('#seq_hm_row').val(best_group); 
                 $('#seq_hm_col').val(best_group_2);
                 
-                $('#tpl_group_col').val(best_group);
-                $('#tpl_metric_col').val(best_metric);
-                $('#tpl_line_x').val(best_group_2);
-                $('#tpl_line_y').val(best_metric);
-                $('#tpl_hm_row').val(best_group);
-                $('#tpl_hm_col').val(best_group_2);
-                
-                $('#metric_choice').val(best_metric);
+                // Mueve la vista a la sección de resultados
+                $('html, body').animate({
+                    scrollTop: $("#headTable").offset().top - 200
+                }, 500);
+
 
             },
             error: function(jqXHR) {
@@ -230,7 +364,7 @@ $(document).ready(function() {
     // --- 2) Generar Secuencia Nativa ---
     $('#generateSeqBtn').click(function() {
         const fileInput = $('#file')[0];
-        if (fileInput.files.length === 0) {
+        if (fileInput.files.length === 0 || !validateFile(fileInput)) {
             alert('Por favor, sube un archivo CSV primero.');
             return;
         }
@@ -281,20 +415,16 @@ $(document).ready(function() {
         });
     });
 
-    // --- 3) Generar Historia (CON IA) ---
+    // --- 3) Generar Historia (CON IA) y Gráficos de Soporte ---
     $('#generateStoryBtn').click(function() {
         const fileInput = $('#file')[0];
-        if (fileInput.files.length === 0) {
+        if (fileInput.files.length === 0 || !validateFile(fileInput)) {
             alert('Por favor, sube un archivo CSV primero.');
             return;
         }
-        // Ya no se basa en la secuencia, sino en el análisis
-        // if (appState.seq_paths.length === 0) {
-        //     alert('Debes generar una secuencia primero para crear una historia basada en ella.');
-        //     return;
-        // }
 
         const formData = new FormData();
+        // Claves del análisis inicial
         formData.append('file', fileInput.files[0]);
         formData.append('group_col', $('#group_col').val());
         formData.append('metric_choice', $('#metric_choice').val());
@@ -303,15 +433,20 @@ $(document).ready(function() {
         formData.append('z_thr', $('#z_thr').val());
         formData.append('mad_thr', $('#mad_thr').val());
         formData.append('min_n', $('#min_n').val());
-        // Pasamos el TopN de la secuencia para que la IA vea los mismos datos
+        // Claves de la secuencia para consistencia
         formData.append('seq_topn', $('#seq_topn').val()); 
-        
-        // (Ya no necesitamos pasar paths y captions)
-        // appState.seq_paths.forEach(path => formData.append('seq_paths[]', path));
-        // appState.seq_captions.forEach(cap => formData.append('seq_captions[]', cap));
+        formData.append('seq_theme', $('#seq_theme').val());
+        formData.append('seq_simple', $('#seq_simple').is(':checked') ? 'on' : 'off');
+        formData.append('seq_line_x', $('#seq_line_x').val()); // NEW
+        formData.append('seq_line_y', $('#seq_line_y').val()); // NEW
+
+        $('#downloadZipBtn').hide(); // Ocultar al inicio del proceso
 
         $(this).text('Consultando al Agente IA...').prop('disabled', true);
         $('#storyMd').html('<p>Generando insights y recomendaciones...</p>');
+        $('#aiChartsLog').empty();
+        $('#aiChartsGallery').html('<p>Esperando la respuesta de la IA...</p>');
+
 
         $.ajax({
             url: '/generate_story',
@@ -321,93 +456,50 @@ $(document).ready(function() {
             contentType: false,
             success: function(data) {
                 if (data.error) {
-                    $('#storyMd').html(`<p class="log-error">${escapeHTML(data.error)}</p>`);
+                    showLog(data.error, '#storyMd', true);
+                    $('#aiChartsGallery').empty();
                     return;
                 }
-                // La API de IA devuelve Markdown, así que necesitamos una librería
-                // o una conversión simple. Usaremos una simple por ahora.
+                
+                // Conversión de Markdown simple a HTML para el frontend
                 const storyHtml = data.story
                                     .replace(/### (.*)/g, '<h3>$1</h3>')
                                     .replace(/###\s(.*)/g, '<h3>$1</h3>')
                                     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                                    .replace(/\* (.*)/g, '<li>$1</li>')
-                                    .replace(/\n/g, '<br>');
+                                    .replace(/\n/g, '<br>')
+                                    .replace(/<br>\* (.*)/g, '<br>&nbsp;&nbsp;&nbsp;• $1')
+                                    .replace(/\* (.*)/g, '&nbsp;&nbsp;&nbsp;• $1'); 
+                                    
                 $('#storyMd').html(storyHtml);
+                
+                // *** ¡PASO SECUENCIAL CLAVE! ***
+                // Después de obtener la historia, genera los gráficos de soporte
+                generateAiCharts();
             },
             error: function(jqXHR) {
-                $('#storyMd').html(`<p class="log-error">Error: ${escapeHTML(jqXHR.responseJSON ? jqXHR.responseJSON.error : jqXHR.responseText)}</p>`);
+                showLog(`Error: ${escapeHTML(jqXHR.responseJSON ? jqXHR.responseJSON.error : jqXHR.responseText)}`, '#storyMd', true);
+                $('#aiChartsGallery').empty();
             },
             complete: function() {
-                $('#generateStoryBtn').text('🧠 Generar Insights con IA').prop('disabled', false);
+                $('#generateStoryBtn').text('🧠 Generar Insights y Gráficos').prop('disabled', false);
             }
         });
     });
 
-    // --- 4) Generar Plantillas Individuales ---
+    // --- 4) Generar Plantillas Individuales (REMOVIDO) ---
     $('#generateTplBtn').click(function() {
-        const fileInput = $('#file')[0];
-        if (fileInput.files.length === 0) {
-            alert('Por favor, sube un archivo CSV primero.');
-            return;
-        }
-
-        const formData = new FormData();
-        formData.append('file', fileInput.files[0]);
-        $('input[name="tpl_chart_types"]:checked').each(function() {
-            // Arreglo para que envíe como lista
-            formData.append('tpl_chart_types[]', $(this).val()); 
-        });
-        formData.append('tpl_theme', $('#tpl_theme').val());
-        formData.append('tpl_simple', $('#tpl_simple').is(':checked') ? 'on' : 'off');
-        formData.append('tpl_group_col', $('#tpl_group_col').val());
-        formData.append('tpl_metric_col', $('#tpl_metric_col').val());
-        formData.append('tpl_topn', $('#tpl_topn').val());
-        formData.append('tpl_norm', $('#tpl_norm').is(':checked') ? 'on' : 'off');
-        formData.append('tpl_line_x', $('#tpl_line_x').val());
-        formData.append('tpl_line_y', $('#tpl_line_y').val());
-        formData.append('tpl_hm_row', $('#tpl_hm_row').val());
-        formData.append('tpl_hm_col', $('#tpl_hm_col').val());
-        formData.append('tpl_title', $('#tpl_title').val());
-        formData.append('tpl_subtitle', $('#tpl_subtitle').val());
-        
-        $(this).text('Generando...').prop('disabled', true);
-        $('#tplGallery').html('<p>Generando plantillas seleccionadas...</p>');
-        showLog('', '#tplLog');
-
-        $.ajax({
-            url: '/generate_templates',
-            type: 'POST',
-            data: formData,
-            processData: false,
-            contentType: false,
-            success: function(data) {
-                if (data.error) {
-                    showLog(data.error, '#tplLog', true);
-                    $('#tplGallery').empty();
-                    return;
-                }
-                generateGallery(data, '#tplGallery');
-                showLog(data.log, '#tplLog');
-            },
-            error: function(jqXHR) {
-                showLog('Error generando plantillas: ' + (jqXHR.responseJSON ? jqXHR.responseJSON.error : jqXHR.responseText), '#tplLog', true);
-                $('#tplGallery').empty();
-            },
-            complete: function() {
-                $('#generateTplBtn').text('Generar plantillas individuales').prop('disabled', false);
-            }
-        });
+        alert("Esta función ha sido deshabilitada. Usa 'Generar Insights y Gráficos' para obtener visualizaciones recomendadas.");
     });
-
-    // --- 5) Descargar ZIP ---
-    $('#downloadZipBtn').click(function() {
-        window.location.href = '/download_zip';
+    
+    // --- 5) Descargar ZIP (ahora es un enlace directo en la sección IA) ---
+    $('#downloadZipBtn').click(function(e) {
+         return true;
     });
 
     // --- 6) LÓGICA DEL LIGHTBOX (Modal) ---
     
     // Abrir el lightbox
-    $('.container').on('click', '.gallery-image-clickable', function() {
+    $('.main-content').on('click', '.gallery-image-clickable', function() {
         const src = $(this).attr('src');
         const caption = $(this).data('caption');
         
@@ -417,8 +509,10 @@ $(document).ready(function() {
     });
     
     // Cerrar el lightbox al hacer clic en la 'X' o en el fondo
-    $('#lightboxClose, #lightboxOverlay').click(function() {
-        $('#lightboxOverlay').fadeOut(200);
+    $('#lightboxClose, #lightboxOverlay').click(function(e) {
+        if ($(e.target).is('#lightboxOverlay') || $(e.target).is('#lightboxClose')) {
+            $('#lightboxOverlay').fadeOut(200);
+        }
     });
     
     // Evitar que se cierre al hacer clic EN la imagen
@@ -427,33 +521,3 @@ $(document).ready(function() {
     });
 
 });
-
-/**
- * Helper para actualizar las opciones de un dropdown
- */
-function updateDropdown(selectId, options, currentValue) {
-    const $select = $(selectId);
-    $select.empty();
-    
-    if (!options || options.length === 0) {
-        $select.append($('<option>', { value: '', text: 'N/A' }));
-        return;
-    }
-    
-    if (selectId === '#metric_choice' && !options.includes('__tasa__')) {
-         options.unshift('__tasa__');
-    }
-
-    options.forEach(option => {
-        $select.append($('<option>', {
-            value: option,
-            text: option
-        }));
-    });
-    
-    if (options.includes(currentValue)) {
-        $select.val(currentValue);
-    } else {
-        $select.val(options[0]);
-    }
-}

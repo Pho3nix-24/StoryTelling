@@ -8,7 +8,8 @@ import os
 # - Entra a Google AI Studio, genera una NUEVA API key
 #   y reemplaza el texto "TU_NUEVA_API_KEY_AQUI" por tu clave real.
 
-GEMINI_API_KEY = "AIzaSyA0SLDi2SKBXh5tT4X9gXancHSMZ_XD-pg"  # ← reemplaza esto por tu nueva API key
+GEMINI_API_KEY = "---------------------------------------"  # ← reemplaza esto por tu nueva 
+SECRET_KEY = os.environ.get('SECRET_KEY', 'una_clave_secreta_muy_larga_y_dificil')
 
 # Carpeta donde se guardan las imágenes generadas
 OUTPUT_DIR = "./output_images"
